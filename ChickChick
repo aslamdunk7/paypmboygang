@@ -1,0 +1,212 @@
+-- Environment Spoof
+local function spoofEnvironment()
+    local oldGethui = gethui
+    local oldGetfenv = getfenv
+    local oldGetrenv = getrenv
+
+    gethui = function() return game:GetService("CoreGui") end
+    getfenv = function() return _G end
+    getrenv = function() return _G end
+
+    task.wait(1.5)
+
+    gethui = oldGethui
+    getfenv = oldGetfenv
+    getrenv = oldGetrenv
+
+    -- ทำลายลายเซ็นของ Executor
+    if syn then syn = nil end
+    if getexecutorname then getexecutorname = nil end
+    if identifyexecutor then identifyexecutor = nil end
+    if checkexecutor then checkexecutor = nil end
+end
+
+-- ค้นหาและปิด BAC Modules
+local function disableBACModules()
+    local services = {
+        game:GetService("Players").LocalPlayer:FindFirstChild("PlayerScripts"),
+        game:GetService("ReplicatedStorage"),
+        game:GetService("CoreGui")
+    }
+
+    local bacKeywords = {"bac", "anti", "cheat", "detect", "guard", "verify", "integrity", "vm"}
+
+    for _, service in ipairs(services) do
+        if not service then continue end
+        for _, child in ipairs(service:GetDescendants()) do
+            if child:IsA("ModuleScript") and child.Name:lower() then
+                local name = child.Name:lower()
+                for _, keyword in ipairs(bacKeywords) do
+                    if name:find(keyword) then
+                        pcall(function()
+                            local dummy = {}
+                            setmetatable(dummy, {
+                                __index = function() return function() end end,
+                                __newindex = function() end
+                            })
+                            local oldReq = require
+                            require = function(mod)
+                                if mod == child then return dummy end
+                                return oldReq(mod)
+                            end
+                        end)
+                        break
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- RemoteEvent Hijack
+local function hijackRemoteEvents()
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local remoteModule = replicatedStorage:FindFirstChild("remotesModule")
+    if not remoteModule then return end
+
+    local success, remotes = pcall(require, remoteModule)
+    if not success or type(remotes) ~= "table" then return end
+
+    local oldFire = remotes.fire
+    local oldInvoke = remotes.invoke
+
+    remotes.fire = function(self, def, ...)
+        local args = {...}
+        if def and type(def) == "string" then
+            if def:find("TowerStart") or def:find("Rebirth") or def:find("UpgradeGenerator") then
+                args[#args+1] = {
+                    _ = os.clock() + math.random(0, 50) / 1000,
+                    seed = math.random(1000, 9999)
+                }
+                task.wait(math.random(10, 60) / 1000)
+            end
+        end
+        return oldFire(self, def, unpack(args))
+    end
+
+    remotes.invoke = function(self, def, ...)
+        local args = {...}
+        if def and type(def) == "string" and (def:find("TowerStart") or def:find("Rebirth")) then
+            task.wait(math.random(20, 100) / 1000)
+        end
+        return oldInvoke(self, def, unpack(args))
+    end
+
+    remoteModule._wrapped = true
+end
+
+-- Humanizer Class
+local Humanizer = {
+    LastAction = "",
+    ActionCount = 0,
+    Cooldown = 0,
+    IdleTimer = 0
+}
+
+function Humanizer:ShouldAct(actionName)
+    -- สุ่มเดิน/กระโดดไม่เกี่ยวข้อง
+    if math.random(1, 20) == 1 then
+        local char = game.Players.LocalPlayer.Character
+        if char and char:FindFirstChild("Humanoid") then
+            local hum = char.Humanoid
+            if math.random(1, 2) == 1 then
+                hum:MoveTo(Vector3.new(
+                    char.PrimaryPart.Position.X + math.random(-5, 5),
+                    char.PrimaryPart.Position.Y,
+                    char.PrimaryPart.Position.Z + math.random(-5, 5)
+                ))
+            else
+                hum.Jump = true
+            end
+        end
+    end
+
+    -- ตรวจจับ action ซ้ำ
+    if self.LastAction == actionName then
+        self.ActionCount = self.ActionCount + 1
+    else
+        self.ActionCount = 1
+        self.LastAction = actionName
+    end
+
+    if self.ActionCount > 3 then
+        local pause = math.random(200, 800) / 1000
+        task.wait(pause)
+        self.ActionCount = 0
+        return false
+    end
+
+    local delay = math.random(80, 250) / 1000
+    self.Cooldown = delay
+    task.wait(delay)
+    return true
+end
+
+-- Noclip Controller
+local NoclipController = {
+    Active = false,
+    Timer = 0
+}
+
+function NoclipController:Enable()
+    if self.Active then return end
+    self.Active = true
+    local char = game.Players.LocalPlayer.Character
+    if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
+    self.Timer = tick()
+end
+
+function NoclipController:Disable()
+    if not self.Active then return end
+    self.Active = false
+    local char = game.Players.LocalPlayer.Character
+    if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = true
+        end
+    end
+end
+
+function NoclipController:Toggle()
+    if self.Active then
+        self:Disable()
+    else
+        self:Enable()
+    end
+    task.wait(2)
+    self:Disable()
+end
+
+local function initializeBypass()
+    pcall(spoofEnvironment)
+    task.wait(0.5)
+    pcall(disableBACModules)
+    task.wait(0.3)
+    pcall(hijackRemoteEvents)
+
+    game:GetService("RunService").Heartbeat:Connect(function()
+        if Humanizer.ActionCount > 20 then
+            Humanizer.ActionCount = 0
+            Humanizer.LastAction = ""
+        end
+    end)
+
+    print("BAC Bypass Activated — absolute PAYOMBOYZ ANTI CHEAT.")
+end
+
+initializeBypass()
+
+-- Export ให้สคริปหลักเรียกใช้
+_G.BluezyBypass = {
+    Humanizer = Humanizer,
+    Noclip = NoclipController,
+    DisableBAC = disableBACModules,
+    SpoofEnv = spoofEnvironment,
+    Hijack = hijackRemoteEvents
+}
