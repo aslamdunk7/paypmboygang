@@ -24,12 +24,16 @@ task.spawn(function()
                         if Constant == "X-16" then
                             local OldHook
                             OldHook = hookfunction(Value, function(...)
-                                local Level = 1
-                                local okStack, Stack = pcall(debug.getstack, Level)
-                                if okStack and type(Stack) == "table" then
-                                    for Index, Val in next, Stack do
-                                        if Val == "X-16" then
-                                            pcall(debug.setstack, Level, Index, nil)
+                                local getstack = debug and debug.getstack
+                                local setstack = debug and debug.setstack
+                                if getstack and setstack then
+                                    local Level = 1
+                                    local okStack, Stack = pcall(getstack, Level)
+                                    if okStack and type(Stack) == "table" then
+                                        for Index, Val in next, Stack do
+                                            if Val == "X-16" then
+                                                pcall(setstack, Level, Index, nil)
+                                            end
                                         end
                                     end
                                 end
@@ -58,10 +62,11 @@ end)
 local HUB_NAME, HUB_TITLE, HUB_AUTHOR, HUB_TAG, HUB_DIR, HUB_KEY =
     "PayomboyZ HUB", "เก็บไข่ไปกับพยอมบอย 🥚", "PayomboyZ HUB • v2", "PayomboyZ", "PayomboyZ_SAE", "PayomboyZ"
 
-local Players, ReplicatedStorage, RunService, Workspace, TeleportService, HttpService, VirtualUser, Lighting, ProximityPromptService =
+local Players, ReplicatedStorage, RunService, Workspace, TeleportService, HttpService, VirtualUser, Lighting, ProximityPromptService, UserInputService =
     game:GetService("Players"), game:GetService("ReplicatedStorage"), game:GetService("RunService"),
     game:GetService("Workspace"), game:GetService("TeleportService"), game:GetService("HttpService"),
-    game:GetService("VirtualUser"), game:GetService("Lighting"), game:GetService("ProximityPromptService")
+    game:GetService("VirtualUser"), game:GetService("Lighting"), game:GetService("ProximityPromptService"),
+    game:GetService("UserInputService")
 
 -- Autoexec safety & Place Guard
 if game.PlaceId ~= 107778070777162 then
@@ -618,13 +623,13 @@ do
             if not ok or not gc then return nil end
             for _, f in next, gc do
                 if typeof(f) == "function" and islclosure(f) then
-                    local upvs = debug.getupvalues(f)
-                    local line = debug.info(f, "l")
-                    if upvs and #upvs == nups and line == linedef then
+                    local okUp, upvs = pcall(debug.getupvalues, f)
+                    local okInfo, line = pcall(debug.info, f, "l")
+                    if okUp and okInfo and upvs and type(upvs) == "table" and #upvs == nups and line == linedef then
                         -- extra check: upvalue 3 เป็น table ที่มี Humanoid key
                         if nups == 19 then
-                            local t = debug.getupvalue(f, 3)
-                            if typeof(t) == "table" and rawget(t, "Humanoid") then
+                            local okUp3, t = pcall(debug.getupvalue, f, 3)
+                            if okUp3 and typeof(t) == "table" and rawget(t, "Humanoid") then
                                 return f
                             end
                         else
@@ -636,19 +641,23 @@ do
             return nil
         end
 
-        local target = findAntiSpeedFunc(19, 3)
-        if target then
-            local inner = debug.getupvalue(target, 2)
-            if inner and typeof(inner) == "function" then
-                local original; original = hookfunction(inner, newlclosure(function(p1, p2)
-                    -- ล้าง metatable ของ velocity/state table → speed check ผ่าน
-                    if p2 and typeof(p2) == "table" then
-                        pcall(setmetatable, p2, {})
-                    end
-                    return original(p1, p2)
-                end))
-                bypassOk = true
-                logLine("init", "SpeedBP: hookfunction anti-speed สำเร็จ (gc scan)")
+        local okTarget, target = pcall(findAntiSpeedFunc, 19, 3)
+        if okTarget and target then
+            local okInner, inner = pcall(debug.getupvalue, target, 2)
+            if okInner and inner and typeof(inner) == "function" then
+                local okHook = pcall(function()
+                    local original; original = hookfunction(inner, newlclosure(function(p1, p2)
+                        -- ล้าง metatable ของ velocity/state table → speed check ผ่าน
+                        if p2 and typeof(p2) == "table" then
+                            pcall(setmetatable, p2, {})
+                        end
+                        return original(p1, p2)
+                    end))
+                end)
+                if okHook then
+                    bypassOk = true
+                    logLine("init", "SpeedBP: hookfunction anti-speed สำเร็จ (gc scan)")
+                end
             end
         end
     end
@@ -811,12 +820,24 @@ function Guardless.detach()
     ENV.NyxDetached = ENV.NyxDetached or {}
     local held = ENV.NyxDetached
     local ok = true
+    local isMobile = UserInputService and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
     for _, name in ipairs(Guardless.Reports) do
         local live = net:FindFirstChild(name)
         if live then
+            if typeof(getconnections) == "function" then
+                pcall(function()
+                    for _, conn in ipairs(getconnections(live.OnClientEvent)) do
+                        conn:Disconnect()
+                    end
+                end)
+            end
             held[name] = { remote = live, parent = net }
-            local okd = pcall(function() live.Parent = nil end)
+            local okd = pcall(function()
+                if not isMobile then
+                    live.Parent = nil
+                end
+            end)
             if not okd then ok = false end
         elseif not (held[name] or net:FindFirstChild("ClientCharacter: IntegrityHeartbeat")) then
             ok = false
@@ -897,10 +918,13 @@ local function pin(pos)
     end
 
     conns[#conns + 1] = RunService.Heartbeat:Connect(apply)
-    pcall(function() conns[#conns + 1] = RunService.PreSimulation:Connect(apply) end)
-    pcall(function() conns[#conns + 1] = RunService.PostSimulation:Connect(apply) end)
-    if RunService:IsClient() then
-        pcall(function() conns[#conns + 1] = RunService.RenderStepped:Connect(apply) end)
+    local isMobile = UserInputService and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+    if not isMobile then
+        pcall(function() conns[#conns + 1] = RunService.PreSimulation:Connect(apply) end)
+        pcall(function() conns[#conns + 1] = RunService.PostSimulation:Connect(apply) end)
+        if RunService:IsClient() then
+            pcall(function() conns[#conns + 1] = RunService.RenderStepped:Connect(apply) end)
+        end
     end
 
     apply()
