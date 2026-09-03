@@ -70,6 +70,8 @@ getgenv().UnloadPayomboyZ = function()
     getgenv().autoUpgradeCoopLoopActive = false
     getgenv().autoBuyFeederEnabled = false
     getgenv().autoBuyFeederLoopActive = false
+    getgenv().autoUpgradeRecyclerEnabled = false
+    getgenv().autoUpgradeRecyclerLoopActive = false
 
     if getgenv().autoScrapNoclipConnection then
         getgenv().autoScrapNoclipConnection:Disconnect()
@@ -253,6 +255,28 @@ local function requestRebirth()
     return typeof(result) == "table" and result.ok == true
 end
 
+local function upgradeRecycler()
+    local ok, result = pcall(function()
+        if remotesModule and remotesModule.defs and remotesModule.defs.UpgradeRecycler then
+            return remotesModule.invoke(remotesModule.defs.UpgradeRecycler)
+        end
+        local remotesFolder = replicatedStorage:FindFirstChild("Remotes") or game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 5)
+        if remotesFolder then
+            local remote = remotesFolder:FindFirstChild("UpgradeRecycler") or remotesFolder:WaitForChild("UpgradeRecycler", 2)
+            if remote then
+                if remote:IsA("RemoteFunction") then
+                    return remote:InvokeServer()
+                elseif remote:IsA("RemoteEvent") then
+                    remote:FireServer()
+                    return true
+                end
+            end
+        end
+        return game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("UpgradeRecycler"):InvokeServer()
+    end)
+    return ok and (result == true or (typeof(result) == "table" and result.ok == true))
+end
+
 local function getCurrentMoney()
     local moneyObject = dataControllerModule.money()
 
@@ -299,26 +323,37 @@ local function upgradeFeeders()
 end
 
 local function isTowerRunActive()
-    return localPlayer:GetAttribute("TowerActive") == true
+    if localPlayer:GetAttribute("TowerActive") == true or localPlayer:GetAttribute("InTower") == true or localPlayer:GetAttribute("TowerFloor") ~= nil then
+        return true
+    end
+    local char = localPlayer.Character
+    if char and char:GetAttribute("TowerActive") == true then
+        return true
+    end
+    return false
 end
 
 local function retreatTower()
     pcall(function()
         if remotesModule and remotesModule.defs and remotesModule.defs.TowerSurrender then
-            remotesModule.invoke(remotesModule.defs.TowerSurrender)
-        else
-            local remotesFolder = replicatedStorage:FindFirstChild("Remotes") or game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 5)
-            if remotesFolder then
-                local towerSurrender = remotesFolder:FindFirstChild("TowerSurrender")
-                if towerSurrender then
-                    if towerSurrender:IsA("RemoteFunction") then
-                        towerSurrender:InvokeServer()
-                    elseif towerSurrender:IsA("RemoteEvent") then
-                        towerSurrender:FireServer()
-                    end
+            pcall(function() remotesModule.invoke(remotesModule.defs.TowerSurrender) end)
+        end
+    end)
+    pcall(function()
+        local remotesFolder = replicatedStorage:FindFirstChild("Remotes") or game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 3)
+        if remotesFolder then
+            local towerSurrender = remotesFolder:FindFirstChild("TowerSurrender")
+            if towerSurrender then
+                if towerSurrender:IsA("RemoteFunction") then
+                    towerSurrender:InvokeServer()
+                elseif towerSurrender:IsA("RemoteEvent") then
+                    towerSurrender:FireServer()
                 end
             end
         end
+    end)
+    pcall(function()
+        game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 3):WaitForChild("TowerSurrender", 3):InvokeServer()
     end)
 end
 
@@ -475,11 +510,13 @@ local function stopScrapNoclip()
     end
 end
 
-local function walkToPosition(playerHumanoid, targetPosition)
+local function walkToPosition(playerHumanoid, targetPosition, breakCondition)
     local moveStartTime = os.clock()
     local lastMoveRequest = 0
 
     while getgenv().autoScrapEnabled do
+        if breakCondition and breakCondition() then return end
+
         local currentCharacter = localPlayer.Character
         local currentHumanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
         local currentRootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
@@ -488,21 +525,20 @@ local function walkToPosition(playerHumanoid, targetPosition)
             return
         end
 
-        if (currentRootPart.Position - targetPosition).Magnitude <= 5 then
+        if (currentRootPart.Position - targetPosition).Magnitude <= 4.5 then
             return
         end
 
-        if os.clock() - lastMoveRequest >= 1 then
+        if os.clock() - lastMoveRequest >= 0.25 then
             currentHumanoid:MoveTo(targetPosition)
-
             lastMoveRequest = os.clock()
         end
 
-        if os.clock() - moveStartTime >= 20 then
+        if os.clock() - moveStartTime >= 10 then
             return
         end
 
-        task.wait(0.15)
+        task.wait(0.05)
     end
 end
 
@@ -521,7 +557,9 @@ local function depositAtRecycler()
         return
     end
 
-    walkToPosition(playerHumanoid, recyclerPosition)
+    walkToPosition(playerHumanoid, recyclerPosition, function()
+        return getScrapStackCount() <= 0
+    end)
 
     local waitStartTime = os.clock()
 
@@ -541,15 +579,17 @@ local function depositAtRecycler()
             break
         end
 
-        if os.clock() - waitStartTime >= 20 then
+        if os.clock() - waitStartTime >= 5 then
             break
         end
 
-        task.wait(0.5)
+        task.wait(0.1)
     end
 end
 
 local function collectNearbyScrap()
+    if getScrapStackCount() >= 6 then return end
+
     local pitScrapFolder = workspace:FindFirstChild("PitScrap")
 
     if not pitScrapFolder then
@@ -559,7 +599,7 @@ local function collectNearbyScrap()
     local scrapParts = {}
 
     for _, scrapInstance in ipairs(pitScrapFolder:GetChildren()) do
-        if scrapInstance:IsA("BasePart") then
+        if scrapInstance:IsA("BasePart") and scrapInstance.Parent then
             table.insert(scrapParts, scrapInstance)
         end
     end
@@ -585,12 +625,14 @@ local function collectNearbyScrap()
             return
         end
 
-        if getScrapStackCount() > 6 then
+        if getScrapStackCount() >= 6 then
             return
         end
 
-        if scrapPart.Parent then
-            walkToPosition(playerHumanoid, scrapPart.Position)
+        if scrapPart and scrapPart.Parent then
+            walkToPosition(playerHumanoid, scrapPart.Position, function()
+                return not scrapPart.Parent or getScrapStackCount() >= 6
+            end)
         end
     end
 end
@@ -1908,11 +1950,8 @@ AutoChaos:OnChanged(function(Value)
             while getgenv().autoChaosEnabled do
                 pcall(function()
                     if isChaosEventLive() then
-                        -- Step 1: ถ้าไก่อีกตัวหรือตัวละครอยู่ใน Tower -> ถอนตัวออกมาก่อน
-                        if isTowerRunActive() then
-                            retreatTower()
-                            task.wait(3)
-                        end
+                        -- Step 1: เมื่อ Event มา บังคับยิงสัญญาณ TowerSurrender ถอนตัวออกทันที (ไม่ว่าไก่อื่นหรือเรากำลังติดดันอยู่)
+                        retreatTower()
 
                         -- Step 2: ส่งคำสั่งไก่ลง Chaos Event Arena ทุกๆ 4 วินาที (รองรับกรณีไก่ตาย/เกิดใหม่)
                         if os.clock() - lastOrderTime >= 4 then
@@ -2144,8 +2183,33 @@ AutoUpgradeCoop:OnChanged(function(Value)
     end
 end)
 
+-- 11. Auto Upgrade Recycler
+local AutoUpgradeRecycler = Tabs.Upgrade:AddToggle("AutoUpgradeRecycler", {
+    Title = "อัปเกรดเครื่องรีไซเคิล (Upgrade Recycler)",
+    Description = "ยิงคำสั่งอัปเกรดเครื่อง Recycler เมื่อเงินเพียงพอเพื่อคูณค่าน้ำหนักขยะ",
+    Default = false
+})
+
+AutoUpgradeRecycler:OnChanged(function(Value)
+    getgenv().autoUpgradeRecyclerEnabled = Value
+
+    if Value and not getgenv().autoUpgradeRecyclerLoopActive then
+        getgenv().autoUpgradeRecyclerLoopActive = true
+
+        task.spawn(function()
+            while getgenv().autoUpgradeRecyclerEnabled do
+                pcall(upgradeRecycler)
+
+                task.wait(3.5)
+            end
+
+            getgenv().autoUpgradeRecyclerLoopActive = false
+        end)
+    end
+end)
+
 ObsidianGlassEngine:Notify({
     Title = "ตีไก่ไปกับพยอมบอย",
-    Content = "ติดตั้งระบบ Auto Chaos Event (พร้อม Retreat หอคอย) เรียบร้อย",
+    Content = "ติดตั้งระบบ Auto Chaos Event และ Auto Upgrade Recycler เรียบร้อย",
     Duration = 4
 })
