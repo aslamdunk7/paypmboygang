@@ -86,6 +86,9 @@ getgenv().UnloadPayomboyZ = function()
         if parentGui and parentGui:FindFirstChild("ObsidianGlass_NotifHolder") then
             parentGui.ObsidianGlass_NotifHolder:Destroy()
         end
+        if parentGui and parentGui:FindFirstChild("KaitunDashboardHUD") then
+            parentGui.KaitunDashboardHUD:Destroy()
+        end
     end)
 end
 
@@ -1505,6 +1508,20 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         return TabObj
     end
 
+    -- ⏱️ AUTO MINIMIZE MAIN UI AFTER 5 MINUTES (300 SECONDS)
+    task.delay(300, function()
+        pcall(function()
+            if shell and shell.Parent and shell.Visible then
+                shell.Visible = false
+                ObsidianGlassEngine:Notify({
+                    Title = "⏱️ พับหน้าต่าง UI หลักอัตโนมัติ",
+                    Content = "ครบกำหนด 5 นาที: พับหน้าต่าง UI หลักลงแล้ว (กด [K] หรือคลิกปุ่มลอยเพื่อเปิด UI ได้ทุกเมื่อ)",
+                    Duration = 6
+                })
+            end
+        end)
+    end)
+
     return WindowObj
 end
 
@@ -1516,6 +1533,267 @@ local Window = ObsidianGlassEngine:CreateWindow({
     Title = "ตีไก่ไปกับพยอมบอย",
     SubTitle = "Grow a Chicken Fighter • Obsidian Glass",
 })
+
+-----------------------------------------------------------------------------------------
+-- 📊 KAITUN PRO MONITORING DASHBOARD (TOP-RIGHT HUD)
+-----------------------------------------------------------------------------------------
+
+local KaitunDashboard = {
+    Frame = nil,
+    StartTime = os.time(),
+    StatusLbl = nil,
+    MissionLbl = nil,
+    EventLbl = nil,
+    ResourceLbl = nil,
+    AccountLbl = nil,
+    ProgressLbl = nil
+}
+
+local function formatMoney(amount)
+    amount = tonumber(amount) or 0
+    if amount >= 1e12 then
+        return string.format("%.2fT", amount / 1e12)
+    elseif amount >= 1e9 then
+        return string.format("%.2fB", amount / 1e9)
+    elseif amount >= 1e6 then
+        return string.format("%.2fM", amount / 1e6)
+    elseif amount >= 1e3 then
+        return string.format("%.2fK", amount / 1e3)
+    else
+        return tostring(math.floor(amount))
+    end
+end
+
+local function formatTime(seconds)
+    seconds = tonumber(seconds) or 0
+    local hrs = math.floor(seconds / 3600)
+    local mins = math.floor((seconds % 3600) / 60)
+    local secs = math.floor(seconds % 60)
+    return string.format("%02d:%02d:%02d", hrs, mins, secs)
+end
+
+function KaitunDashboard:Init()
+    local parentGui = getParentGui()
+    pcall(function()
+        if parentGui and parentGui:FindFirstChild("KaitunDashboardHUD") then
+            parentGui.KaitunDashboardHUD:Destroy()
+        end
+    end)
+
+    local hudGui = Instance.new("ScreenGui")
+    hudGui.Name = "KaitunDashboardHUD"
+    hudGui.ResetOnSpawn = false
+    hudGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    hudGui.DisplayOrder = 99990
+
+    if typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
+        pcall(syn.protect_gui, hudGui)
+    elseif typeof(protectgui) == "function" then
+        pcall(protectgui, hudGui)
+    end
+
+    local pOk = pcall(function() hudGui.Parent = parentGui end)
+    if not pOk then
+        hudGui.Parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+    end
+
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "DashboardFrame"
+    mainFrame.Size = UDim2.fromOffset(330, 182)
+    mainFrame.AnchorPoint = Vector2.new(1, 0)
+    mainFrame.Position = UDim2.new(1, -15, 0, 15)
+    mainFrame.BackgroundColor3 = COLORS.shell
+    mainFrame.BackgroundTransparency = 0.15
+    mainFrame.BorderSizePixel = 0
+    mainFrame.ClipsDescendants = true
+    mainFrame.ZIndex = 99990
+    mainFrame.Parent = hudGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 14)
+    corner.Parent = mainFrame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = COLORS.primary
+    stroke.Thickness = 1.6
+    stroke.Transparency = 0.2
+    stroke.Parent = mainFrame
+
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, 0, 0, 32)
+    header.BackgroundColor3 = COLORS.glassDeep
+    header.BackgroundTransparency = 0.2
+    header.BorderSizePixel = 0
+    header.ZIndex = 99991
+    header.Parent = mainFrame
+
+    local hCorner = Instance.new("UICorner")
+    hCorner.CornerRadius = UDim.new(0, 14)
+    hCorner.Parent = header
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1, -40, 1, 0)
+    titleLbl.Position = UDim2.new(0, 12, 0, 0)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Text = "👑 PAYOMBOYZ KAITUN PRO <font color=\"#00f0ff\">[HUD]</font>"
+    titleLbl.RichText = true
+    titleLbl.TextColor3 = COLORS.text
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.TextSize = 12
+    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    titleLbl.ZIndex = 99992
+    titleLbl.Parent = header
+
+    local minBtn = Instance.new("TextButton")
+    minBtn.Size = UDim2.fromOffset(22, 22)
+    minBtn.Position = UDim2.new(1, -28, 0.5, -11)
+    minBtn.BackgroundColor3 = COLORS.glass
+    minBtn.BackgroundTransparency = 0.3
+    minBtn.Text = "─"
+    minBtn.TextColor3 = COLORS.textMuted
+    minBtn.Font = Enum.Font.GothamBold
+    minBtn.TextSize = 12
+    minBtn.ZIndex = 99993
+    minBtn.Parent = header
+
+    local mbCorner = Instance.new("UICorner")
+    mbCorner.CornerRadius = UDim.new(0, 6)
+    mbCorner.Parent = minBtn
+
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Name = "ContentArea"
+    contentFrame.Size = UDim2.new(1, -20, 1, -38)
+    contentFrame.Position = UDim2.new(0, 10, 0, 34)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.ZIndex = 99991
+    contentFrame.Parent = mainFrame
+
+    local function createLabel(name, posY, fontSize, textColor, isRich)
+        local lbl = Instance.new("TextLabel")
+        lbl.Name = name
+        lbl.Size = UDim2.new(1, 0, 0, 20)
+        lbl.Position = UDim2.new(0, 0, 0, posY)
+        lbl.BackgroundTransparency = 1
+        lbl.TextColor3 = textColor or COLORS.text
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = fontSize or 11
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.RichText = isRich == true
+        lbl.ZIndex = 99992
+        lbl.Parent = contentFrame
+        return lbl
+    end
+
+    self.StatusLbl = createLabel("StatusLbl", 0, 11, COLORS.text)
+    self.MissionLbl = createLabel("MissionLbl", 20, 11, COLORS.textMuted)
+    self.EventLbl = createLabel("EventLbl", 40, 11, COLORS.success, true)
+    self.ResourceLbl = createLabel("ResourceLbl", 60, 10, Color3.fromRGB(255, 110, 160))
+    self.AccountLbl = createLabel("AccountLbl", 80, 10, Color3.fromRGB(100, 220, 255))
+    self.ProgressLbl = createLabel("ProgressLbl", 102, 10, Color3.fromRGB(255, 215, 0), true)
+
+    local isCollapsed = false
+    ConnectionManager:Add(minBtn.MouseButton1Click:Connect(function()
+        playClickSound()
+        isCollapsed = not isCollapsed
+        contentFrame.Visible = not isCollapsed
+        mainFrame.Size = isCollapsed and UDim2.fromOffset(330, 32) or UDim2.fromOffset(330, 182)
+        minBtn.Text = isCollapsed and "+" or "─"
+    end), "HudMinBtnClick")
+
+    self.Frame = mainFrame
+
+    task.spawn(function()
+        while mainFrame and mainFrame.Parent do
+            pcall(function() self:Update() end)
+            task.wait(0.5)
+        end
+    end)
+end
+
+function KaitunDashboard:Update()
+    if not self.Frame or not self.Frame.Parent then return end
+
+    pcall(function()
+        local moneyVal = getCurrentMoney()
+
+        local rebirthCount = 0
+        if dataControllerModule and dataControllerModule.rebirth then
+            local rData = dataControllerModule.rebirth()
+            if rData and rData.count then rebirthCount = rData.count end
+        end
+
+        local towerFloor = 0
+        if dataControllerModule and dataControllerModule.towerBest then
+            towerFloor = tonumber(dataControllerModule.towerBest()) or 0
+        end
+
+        local scrapCount = getScrapStackCount()
+        local eggCount = #getOwnedEggPositions()
+
+        local feederCount = 0
+        local coopSlots = 0
+        local coopData = getCoopData()
+        if coopData then
+            if type(coopData.generators) == "table" then feederCount = #coopData.generators end
+            if type(coopData.slots) == "number" then coopSlots = coopData.slots end
+        end
+
+        local eventLive = isChaosEventLive()
+        local eventText = eventLive and "<font color=\"#ff3b3b\">🔥 LIVE (บอสไก่เดือด)</font>" or "<font color=\"#888888\">💤 STANDBY</font>"
+
+        local curTask = "IDLE"
+        local statusThai = "กำลังสแตนด์บายพักผ่อน"
+
+        if getgenv().autoChaosEnabled and eventLive then
+            curTask = "CHAOS_EVENT"
+            statusThai = "⚔️ ลุย Chaos Event Arena"
+        elseif getgenv().autoTowerEnabled and isTowerRunActive() then
+            curTask = "TOWER_RUN"
+            statusThai = "🏰 ตะลุยดันหอคอย (Auto Tower)"
+        elseif getgenv().autoRebirthEnabled and isRebirthReady and isRebirthReady() then
+            curTask = "REBIRTH_ROUTINE"
+            statusThai = "⚡ เคลียร์เงื่อนไขเตรียม Rebirth"
+        elseif getgenv().autoScrapEnabled and scrapCount > 6 then
+            curTask = "DEPOSIT_SCRAP"
+            statusThai = "🗑️ นำเศษเหล็กไปส่งเครื่อง Recycler"
+        elseif getgenv().autoCollectEggEnabled and eggCount > 0 then
+            curTask = "COLLECT_EGGS"
+            statusThai = "🥚 เดินเก็บไข่ไก่รอบเล้า"
+        elseif getgenv().autoScrapEnabled then
+            curTask = "COLLECT_SCRAP"
+            statusThai = "🔧 เก็บเศษเหล็กขยะใน PIT"
+        end
+
+        local priorityMap = {
+            CHAOS_EVENT = "[P0] CHAOS_EVENT",
+            REBIRTH_ROUTINE = "[P1] REBIRTH_ROUTINE",
+            DEPOSIT_SCRAP = "[P1] DEPOSIT_SCRAP",
+            TOWER_RUN = "[P2] AUTO_TOWER",
+            COLLECT_EGGS = "[P3] COLLECT_EGGS",
+            COLLECT_SCRAP = "[P4] COLLECT_SCRAP",
+            IDLE = "[P5] STANDBY_IDLE"
+        }
+
+        local pText = priorityMap[curTask] or ("[P1] " .. curTask)
+
+        local elapsedTime = os.time() - self.StartTime
+        local timeStr = formatTime(elapsedTime)
+
+        local score = math.clamp(math.floor((rebirthCount * 20) + (towerFloor * 2) + (coopSlots * 5)), 0, 100)
+        local barFilled = math.floor(score / 10)
+        local barEmpty = 10 - barFilled
+        local progressBar = string.rep("█", barFilled) .. string.rep("░", barEmpty)
+
+        if self.StatusLbl then self.StatusLbl.Text = "⚡ แอ็กชัน: " .. statusThai end
+        if self.MissionLbl then self.MissionLbl.Text = "🎯 ภารกิจหลัก: " .. pText end
+        if self.EventLbl then self.EventLbl.Text = "⚔️ Chaos Event: " .. eventText end
+        if self.ResourceLbl then self.ResourceLbl.Text = string.format("🗑️ ขยะ: %d/6  |  🥚 ไข่: %d  |  🍗 รางอาหาร: %d Slot", scrapCount, eggCount, feederCount) end
+        if self.AccountLbl then self.AccountLbl.Text = string.format("💰 เงิน: $%s  |  📊 Rebirth: %d  |  🏰 หอคอย: ชั้น %d", formatMoney(moneyVal), rebirthCount, towerFloor) end
+        if self.ProgressLbl then self.ProgressLbl.Text = string.format("🔥 KAITUN SCORE: [<font color=\"#00ffaa\">%s</font>] %d%% (⏱️ %s)", progressBar, score, timeStr) end
+    end)
+end
+
+pcall(function() KaitunDashboard:Init() end)
 
 local Tabs = {
     Farm = Window:AddTab({ Title = "🥚 ฟาร์มไก่" }),
