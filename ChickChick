@@ -1,6 +1,7 @@
 -- ======================================================================================
--- [[ ตีไก่ไปกับพยอมบอย - Obsidian Glass UI & Message (9) Baseline Core ]]
--- Exact logic, execution loops, and timing parity with message (9).txt
+-- [[ ตีไก่ไปกับพยอมบอย - Obsidian Glass UI (Thai Categorized) & Message (9) Core ]]
+-- Exact logic, execution loops, and timing parity with message (9).txt Baseline
+-- Added: Auto Chaos Event Automation with Smart Tower Retreat & Re-entry Logic
 -- ======================================================================================
 
 local CoreGui = game:GetService("CoreGui")
@@ -61,6 +62,8 @@ getgenv().UnloadPayomboyZ = function()
     getgenv().autoUpgradeFeederLoopActive = false
     getgenv().autoTowerEnabled = false
     getgenv().autoTowerLoopActive = false
+    getgenv().autoChaosEnabled = false
+    getgenv().autoChaosLoopActive = false
     getgenv().autoScrapEnabled = false
     getgenv().autoScrapLoopActive = false
     getgenv().autoUpgradeCoopEnabled = false
@@ -87,7 +90,7 @@ getgenv().UnloadPayomboyZ = function()
 end
 
 -----------------------------------------------------------------------------------------
--- 🌐 GAME API & GLOBAL STATE (EXACT MATCH FROM message (9).txt)
+-- 🌐 GAME API & GLOBAL STATE (EXACT MATCH FROM message (9).txt + Auto Chaos)
 -----------------------------------------------------------------------------------------
 
 getgenv().autoCollectEggEnabled = false
@@ -101,6 +104,8 @@ getgenv().autoTowerLoopActive = false
 getgenv().autoTowerOfferHooked = false
 getgenv().autoTowerLastFloorEnabled = false
 getgenv().towerDelaySeconds = 5
+getgenv().autoChaosEnabled = false
+getgenv().autoChaosLoopActive = false
 getgenv().autoScrapEnabled = false
 getgenv().autoScrapLoopActive = false
 getgenv().autoScrapNoclipConnection = nil
@@ -145,7 +150,7 @@ pcall(function()
 end)
 
 -----------------------------------------------------------------------------------------
--- 🧠 AUTOMATION FUNCTIONS (EXACT MATCH FROM message (9).txt)
+-- 🧠 AUTOMATION FUNCTIONS (EXACT MATCH FROM message (9).txt + Chaos Engine)
 -----------------------------------------------------------------------------------------
 
 local function getEggOwner(eggInstance)
@@ -292,6 +297,59 @@ end
 
 local function isTowerRunActive()
     return localPlayer:GetAttribute("TowerActive") == true
+end
+
+local function retreatTower()
+    pcall(function()
+        if remotesModule and remotesModule.defs and remotesModule.defs.TowerSurrender then
+            remotesModule.invoke(remotesModule.defs.TowerSurrender)
+        else
+            local remotesFolder = replicatedStorage:FindFirstChild("Remotes") or game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 5)
+            if remotesFolder then
+                local towerSurrender = remotesFolder:FindFirstChild("TowerSurrender")
+                if towerSurrender then
+                    if towerSurrender:IsA("RemoteFunction") then
+                        towerSurrender:InvokeServer()
+                    elseif towerSurrender:IsA("RemoteEvent") then
+                        towerSurrender:FireServer()
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function isChaosEventLive()
+    local eventCardAnchor = workspace:FindFirstChild("EventCardAnchor")
+    local card = eventCardAnchor and eventCardAnchor:FindFirstChild("EventCard")
+    if card then
+        for _, child in ipairs(card:GetChildren()) do
+            local nameLower = string.lower(child.Name)
+            if string.find(nameLower, "live") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function orderChaos()
+    if chickenModeModule then
+        pcall(function() chickenModeModule.order("chaos") end)
+    end
+    pcall(function()
+        if remotesModule and remotesModule.defs and remotesModule.defs.SetChickenOrder then
+            remotesModule.fire(remotesModule.defs.SetChickenOrder, "chaos")
+        else
+            local remotesFolder = replicatedStorage:FindFirstChild("Remotes") or game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 5)
+            if remotesFolder then
+                local setOrder = remotesFolder:FindFirstChild("SetChickenOrder")
+                if setOrder and setOrder:IsA("RemoteEvent") then
+                    setOrder:FireServer("chaos")
+                end
+            end
+        end
+    end)
 end
 
 local function startTowerRun()
@@ -1015,7 +1073,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     local metricsLabel = Instance.new("TextLabel")
     metricsLabel.Size = UDim2.fromScale(1, 1)
     metricsLabel.BackgroundTransparency = 1
-    metricsLabel.Text = "⚡ Status: Active"
+    metricsLabel.Text = "⚡ สถานะ: พร้อมทำงาน"
     metricsLabel.TextColor3 = COLORS.cyan
     metricsLabel.Font = Enum.Font.GothamBold
     metricsLabel.TextSize = 10
@@ -1072,7 +1130,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     mainSubTitle.Size = UDim2.new(0, 350, 0, 16)
     mainSubTitle.Position = UDim2.new(0, 20, 0, 28)
     mainSubTitle.BackgroundTransparency = 1
-    mainSubTitle.Text = cfg.SubTitle or "Obsidian Glassmorphic UI Engine"
+    mainSubTitle.Text = cfg.SubTitle or "Grow a Chicken Fighter • Obsidian Glass"
     mainSubTitle.TextColor3 = COLORS.textMuted
     mainSubTitle.Font = Enum.Font.Gotham
     mainSubTitle.TextSize = 11
@@ -1154,7 +1212,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         tabBtn.Text = "    " .. tabTitle
         tabBtn.TextColor3 = (tabIndex == 1) and Color3.fromRGB(255, 255, 255) or COLORS.textMuted
         tabBtn.Font = Enum.Font.GothamBold
-        tabBtn.TextSize = 14
+        tabBtn.TextSize = 13
         tabBtn.TextXAlignment = Enum.TextXAlignment.Left
         tabBtn.AutoButtonColor = false
         tabBtn.ZIndex = 12
@@ -1232,7 +1290,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             local defaultVal = (tCfg.Default ~= nil) and tCfg.Default or false
 
             local frame = Instance.new("Frame")
-            frame.Size = UDim2.new(1, -10, 0, desc ~= "" and 55 or 44)
+            frame.Size = UDim2.new(1, -10, 0, desc ~= "" and 58 or 44)
             frame.BackgroundColor3 = COLORS.glassDeep
             frame.BackgroundTransparency = 0.18
             frame.BorderSizePixel = 0
@@ -1255,7 +1313,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
             if desc ~= "" then
                 local dLbl = Instance.new("TextLabel")
-                dLbl.Size = UDim2.new(1, -70, 0, 18)
+                dLbl.Size = UDim2.new(1, -70, 0, 20)
                 dLbl.Position = UDim2.new(0, 12, 0, 30)
                 dLbl.BackgroundTransparency = 1
                 dLbl.Text = desc
@@ -1323,12 +1381,13 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
         function TabObj:AddSlider(id, sCfg)
             local title = sCfg.Title or id
+            local desc = sCfg.Desc or sCfg.Description or ""
             local minVal = sCfg.Min or 0
             local maxVal = sCfg.Max or 100
             local defaultVal = sCfg.Default or minVal
 
             local frame = Instance.new("Frame")
-            frame.Size = UDim2.new(1, -10, 0, 52)
+            frame.Size = UDim2.new(1, -10, 0, desc ~= "" and 68 or 52)
             frame.BackgroundColor3 = COLORS.glassDeep
             frame.BackgroundTransparency = 0.18
             frame.BorderSizePixel = 0
@@ -1360,9 +1419,23 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             valLbl.TextXAlignment = Enum.TextXAlignment.Right
             valLbl.Parent = frame
 
+            if desc ~= "" then
+                local dLbl = Instance.new("TextLabel")
+                dLbl.Size = UDim2.new(1, -24, 0, 18)
+                dLbl.Position = UDim2.new(0, 12, 0, 26)
+                dLbl.BackgroundTransparency = 1
+                dLbl.Text = desc
+                dLbl.TextColor3 = COLORS.textMuted
+                dLbl.Font = Enum.Font.Gotham
+                dLbl.TextSize = 11
+                dLbl.TextXAlignment = Enum.TextXAlignment.Left
+                dLbl.Parent = frame
+            end
+
+            local barY = desc ~= "" and 48 or 34
             local bar = Instance.new("TextButton")
             bar.Size = UDim2.new(1, -24, 0, 8)
-            bar.Position = UDim2.new(0, 12, 0, 34)
+            bar.Position = UDim2.new(0, 12, 0, barY)
             bar.BackgroundColor3 = COLORS.surface
             bar.Text = ""
             bar.Parent = frame
@@ -1436,21 +1509,28 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 end
 
 -----------------------------------------------------------------------------------------
--- 🎛️ UI CONSTRUCTION & TOGGLE BINDINGS (EXACT 1-TO-1 MATCH WITH message (9).txt)
+-- 🎛️ CATEGORIZED THAI UI CONSTRUCTION (EXACT 1-TO-1 LOGIC WITH message (9).txt)
 -----------------------------------------------------------------------------------------
 
 local Window = ObsidianGlassEngine:CreateWindow({
     Title = "ตีไก่ไปกับพยอมบอย",
-    SubTitle = "Grow a Chicken Fighter • Stable Baseline Engine",
+    SubTitle = "Grow a Chicken Fighter • Obsidian Glass",
 })
 
 local Tabs = {
-    Main = Window:AddTab({ Title = "Main" })
+    Farm = Window:AddTab({ Title = "🥚 ฟาร์มไก่" }),
+    Tower = Window:AddTab({ Title = "🏰 ดันหอคอย & อีเวนต์" }),
+    Upgrade = Window:AddTab({ Title = "⚡ อัปเกรด & รีเบิร์ธ" })
 }
 
+-----------------------------------------------------------------------------------------
+-- 📌 TAB 1: 🥚 ฟาร์มไก่ (CHICKEN FARM)
+-----------------------------------------------------------------------------------------
+
 -- 1. Auto Collect Egg
-local AutoCollectEgg = Tabs.Main:AddToggle("AutoCollectEgg", {
-    Title = "Auto Collect Egg",
+local AutoCollectEgg = Tabs.Farm:AddToggle("AutoCollectEgg", {
+    Title = "เก็บไข่ไก่อัตโนมัติ (Auto Collect Egg)",
+    Description = "เดินเก็บไข่ไก่ภายในเล้าตามระยะทางที่ใกล้ที่สุด",
     Default = false
 })
 
@@ -1490,158 +1570,10 @@ AutoCollectEgg:OnChanged(function(Value)
     end
 end)
 
--- 2. Auto Rebirth
-local AutoRebirth = Tabs.Main:AddToggle("AutoRebirth", {
-    Title = "Auto Rebirth",
-    Default = false
-})
-
-AutoRebirth:OnChanged(function(Value)
-    getgenv().autoRebirthEnabled = Value
-
-    if Value and not getgenv().autoRebirthLoopActive and remotesModule and rebirthBonusModule and rebirthExperimentModule and dataControllerModule then
-        getgenv().autoRebirthLoopActive = true
-
-        task.spawn(function()
-            while getgenv().autoRebirthEnabled do
-                local readySuccess, isReady = pcall(isRebirthReady)
-
-                if readySuccess and isReady == true then
-                    if isTowerRunActive() then
-                        task.wait(1)
-                    else
-                        pcall(requestRebirth)
-                        task.wait(1)
-                    end
-                else
-                    task.wait(1)
-                end
-            end
-
-            getgenv().autoRebirthLoopActive = false
-        end)
-    end
-end)
-
--- 3. Auto Upgrade Feeder
-local AutoUpgradeFeeder = Tabs.Main:AddToggle("AutoUpgradeFeeder", {
-    Title = "Auto Upgrade Feeder",
-    Default = false
-})
-
-AutoUpgradeFeeder:OnChanged(function(Value)
-    getgenv().autoUpgradeFeederEnabled = Value
-
-    if Value and not getgenv().autoUpgradeFeederLoopActive and remotesModule and coopViewModule and dataServiceModule and dataControllerModule then
-        getgenv().autoUpgradeFeederLoopActive = true
-
-        task.spawn(function()
-            while getgenv().autoUpgradeFeederEnabled do
-                pcall(upgradeFeeders)
-
-                task.wait(1)
-            end
-
-            getgenv().autoUpgradeFeederLoopActive = false
-        end)
-    end
-end)
-
--- 4. Delay Tower
-local DelayTower = Tabs.Main:AddSlider("DelayTower", {
-    Title = "Delay Tower",
-    Description = "",
-    Default = 5,
-    Min = 1,
-    Max = 60,
-    Rounding = 0,
-    Callback = function(Value)
-        getgenv().towerDelaySeconds = Value
-    end
-})
-
-DelayTower:OnChanged(function(Value)
-    getgenv().towerDelaySeconds = Value
-end)
-
--- 5. Last Tower
-local LastTower = Tabs.Main:AddToggle("LastTower", {
-    Title = "Last Tower",
-    Description = "",
-    Default = false
-})
-
-LastTower:OnChanged(function(Value)
-    getgenv().autoTowerLastFloorEnabled = Value
-end)
-
--- 6. Auto Tower
-local AutoTower = Tabs.Main:AddToggle("AutoTower", {
-    Title = "Auto Tower",
-    Default = false
-})
-
-AutoTower:OnChanged(function(Value)
-    getgenv().autoTowerEnabled = Value
-
-    if Value and remotesModule then
-        pcall(hookTowerContinueOffer)
-    end
-
-    if Value and not getgenv().autoTowerLoopActive and remotesModule then
-        getgenv().autoTowerLoopActive = true
-
-        task.spawn(function()
-            local wasWaitingForRebirth = false
-
-            while getgenv().autoTowerEnabled do
-                local rebirthPending = false
-
-                if getgenv().autoRebirthEnabled and rebirthBonusModule and rebirthExperimentModule and dataControllerModule then
-                    local readySuccess, isReady = pcall(isRebirthReady)
-
-                    rebirthPending = readySuccess and isReady == true
-                end
-
-                if rebirthPending then
-                    wasWaitingForRebirth = true
-
-                    task.wait(1)
-                elseif wasWaitingForRebirth then
-                    wasWaitingForRebirth = false
-
-                    task.wait(3)
-                elseif isTowerRunActive() then
-                    task.wait(1)
-                else
-                    local towerDelay = tonumber(getgenv().towerDelaySeconds) or 5
-
-                    if towerDelay < 1 then
-                        towerDelay = 1
-                    end
-
-                    if towerDelay > 60 then
-                        towerDelay = 60
-                    end
-
-                    task.wait(towerDelay)
-
-                    if getgenv().autoTowerEnabled and not isTowerRunActive() then
-                        pcall(startTowerRun)
-                    end
-
-                    task.wait(1)
-                end
-            end
-
-            getgenv().autoTowerLoopActive = false
-        end)
-    end
-end)
-
--- 7. Auto Scrap
-local AutoScrap = Tabs.Main:AddToggle("AutoScrap", {
-    Title = "Auto Scrap",
+-- 2. Auto Scrap
+local AutoScrap = Tabs.Farm:AddToggle("AutoScrap", {
+    Title = "เก็บเศษเหล็กอัตโนมัติ (Auto Scrap)",
+    Description = "เก็บเศษเหล็กจาก Pit และไปส่งที่เครื่อง Recycler เมื่อคลังเต็ม",
     Default = false
 })
 
@@ -1675,33 +1607,219 @@ AutoScrap:OnChanged(function(Value)
     end
 end)
 
--- 8. Auto Upgrade Coop
-local AutoUpgradeCoop = Tabs.Main:AddToggle("AutoUpgradeCoop", {
-    Title = "Auto Upgrade Coop",
+-----------------------------------------------------------------------------------------
+-- 📌 TAB 2: 🏰 ดันหอคอย & อีเวนต์ (TOWER & CHAOS EVENT)
+-----------------------------------------------------------------------------------------
+
+-- 3. Auto Chaos Event
+local AutoChaos = Tabs.Tower:AddToggle("AutoChaos", {
+    Title = "เข้าร่วม Chaos Event อัตโนมัติ (Auto Chaos Event)",
+    Description = "เมื่ออีเวนต์เปิด จะถอนตัวจากหอคอย (ถ้าอยู่ใน Tower) แล้วส่งไก่เข้า Chaos Arena",
     Default = false
 })
 
-AutoUpgradeCoop:OnChanged(function(Value)
-    getgenv().autoUpgradeCoopEnabled = Value
+AutoChaos:OnChanged(function(Value)
+    getgenv().autoChaosEnabled = Value
 
-    if Value and not getgenv().autoUpgradeCoopLoopActive and remotesModule and coopViewModule and dataServiceModule and dataControllerModule then
-        getgenv().autoUpgradeCoopLoopActive = true
+    if Value and not getgenv().autoChaosLoopActive then
+        getgenv().autoChaosLoopActive = true
 
         task.spawn(function()
-            while getgenv().autoUpgradeCoopEnabled do
-                pcall(upgradeCoop)
+            local lastOrderTime = 0
 
-                task.wait(5)
+            while getgenv().autoChaosEnabled do
+                pcall(function()
+                    if isChaosEventLive() then
+                        -- Step 1: ถ้าไก่อีกตัวหรือตัวละครอยู่ใน Tower -> ถอนตัวออกมาก่อน
+                        if isTowerRunActive() then
+                            retreatTower()
+                            task.wait(3)
+                        end
+
+                        -- Step 2: ส่งคำสั่งไก่ลง Chaos Event Arena ทุกๆ 4 วินาที (รองรับกรณีไก่ตาย/เกิดใหม่)
+                        if os.clock() - lastOrderTime >= 4 then
+                            lastOrderTime = os.clock()
+                            orderChaos()
+                        end
+                    else
+                        lastOrderTime = 0
+                    end
+                end)
+
+                task.wait(1.5)
             end
 
-            getgenv().autoUpgradeCoopLoopActive = false
+            getgenv().autoChaosLoopActive = false
+        end)
+    end
+end)
+
+-- 4. Auto Tower
+local AutoTower = Tabs.Tower:AddToggle("AutoTower", {
+    Title = "ท้าทายหอคอยอัตโนมัติ (Auto Tower)",
+    Description = "เข้าดันหอคอยและปฏิเสธข้อเสนอต่อเวลาให้อัตโนมัติ (จะหยุดชั่วคราวเมื่อ Chaos LIVE)",
+    Default = false
+})
+
+AutoTower:OnChanged(function(Value)
+    getgenv().autoTowerEnabled = Value
+
+    if Value and remotesModule then
+        pcall(hookTowerContinueOffer)
+    end
+
+    if Value and not getgenv().autoTowerLoopActive and remotesModule then
+        getgenv().autoTowerLoopActive = true
+
+        task.spawn(function()
+            local wasWaitingForRebirth = false
+
+            while getgenv().autoTowerEnabled do
+                local rebirthPending = false
+
+                if getgenv().autoRebirthEnabled and rebirthBonusModule and rebirthExperimentModule and dataControllerModule then
+                    local readySuccess, isReady = pcall(isRebirthReady)
+
+                    rebirthPending = readySuccess and isReady == true
+                end
+
+                local chaosLive = getgenv().autoChaosEnabled and isChaosEventLive()
+
+                if chaosLive then
+                    -- ถ้าระบบ Chaos เปิดอยู่ และ Event กำลัง LIVE -> ให้รอ ห้ามเริ่ม Tower รอบใหม่
+                    task.wait(1.5)
+                elseif rebirthPending then
+                    wasWaitingForRebirth = true
+
+                    task.wait(1)
+                elseif wasWaitingForRebirth then
+                    wasWaitingForRebirth = false
+
+                    task.wait(3)
+                elseif isTowerRunActive() then
+                    task.wait(1)
+                else
+                    local towerDelay = tonumber(getgenv().towerDelaySeconds) or 5
+
+                    if towerDelay < 1 then
+                        towerDelay = 1
+                    end
+
+                    if towerDelay > 60 then
+                        towerDelay = 60
+                    end
+
+                    task.wait(towerDelay)
+
+                    -- ตรวจสอบก่อนกดเริ่ม Tower อีกครั้งว่าไม่ได้ติด Chaos LIVE
+                    if getgenv().autoTowerEnabled and not isTowerRunActive() and not (getgenv().autoChaosEnabled and isChaosEventLive()) then
+                        pcall(startTowerRun)
+                    end
+
+                    task.wait(1)
+                end
+            end
+
+            getgenv().autoTowerLoopActive = false
+        end)
+    end
+end)
+
+-- 5. Last Tower
+local LastTower = Tabs.Tower:AddToggle("LastTower", {
+    Title = "เริ่มจากชั้นสูงสุด (Last Floor Elevator)",
+    Description = "ใช้ลิฟต์วาร์ปไปยังชั้นสูงสุดที่เคยผ่านก่อนเริ่มดันหอคอย",
+    Default = false
+})
+
+LastTower:OnChanged(function(Value)
+    getgenv().autoTowerLastFloorEnabled = Value
+end)
+
+-- 6. Delay Tower
+local DelayTower = Tabs.Tower:AddSlider("DelayTower", {
+    Title = "ดีเลย์เข้าหอคอย",
+    Description = "ระยะเวลารอระหว่างการลงดันหอคอยแต่ละรอบ (วินาที)",
+    Default = 5,
+    Min = 1,
+    Max = 60,
+    Rounding = 0,
+    Callback = function(Value)
+        getgenv().towerDelaySeconds = Value
+    end
+})
+
+DelayTower:OnChanged(function(Value)
+    getgenv().towerDelaySeconds = Value
+end)
+
+-----------------------------------------------------------------------------------------
+-- 📌 TAB 3: ⚡ อัปเกรด & เกิดใหม่ (UPGRADE & REBIRTH)
+-----------------------------------------------------------------------------------------
+
+-- 7. Auto Rebirth
+local AutoRebirth = Tabs.Upgrade:AddToggle("AutoRebirth", {
+    Title = "เกิดใหม่อัตโนมัติ (Auto Rebirth)",
+    Description = "ทำการ Rebirth ทันทีเมื่อเงื่อนไขและเลเวลพร้อม",
+    Default = false
+})
+
+AutoRebirth:OnChanged(function(Value)
+    getgenv().autoRebirthEnabled = Value
+
+    if Value and not getgenv().autoRebirthLoopActive and remotesModule and rebirthBonusModule and rebirthExperimentModule and dataControllerModule then
+        getgenv().autoRebirthLoopActive = true
+
+        task.spawn(function()
+            while getgenv().autoRebirthEnabled do
+                local readySuccess, isReady = pcall(isRebirthReady)
+
+                if readySuccess and isReady == true then
+                    if isTowerRunActive() then
+                        task.wait(1)
+                    else
+                        pcall(requestRebirth)
+                        task.wait(1)
+                    end
+                else
+                    task.wait(1)
+                end
+            end
+
+            getgenv().autoRebirthLoopActive = false
+        end)
+    end
+end)
+
+-- 8. Auto Upgrade Feeder
+local AutoUpgradeFeeder = Tabs.Upgrade:AddToggle("AutoUpgradeFeeder", {
+    Title = "อัปเกรดเครื่องให้อาหาร (Upgrade Feeder)",
+    Description = "อัปเกรดระดับเลเวลของเครื่องให้อาหารไก่อัตโนมัติ",
+    Default = false
+})
+
+AutoUpgradeFeeder:OnChanged(function(Value)
+    getgenv().autoUpgradeFeederEnabled = Value
+
+    if Value and not getgenv().autoUpgradeFeederLoopActive and remotesModule and coopViewModule and dataServiceModule and dataControllerModule then
+        getgenv().autoUpgradeFeederLoopActive = true
+
+        task.spawn(function()
+            while getgenv().autoUpgradeFeederEnabled do
+                pcall(upgradeFeeders)
+
+                task.wait(1)
+            end
+
+            getgenv().autoUpgradeFeederLoopActive = false
         end)
     end
 end)
 
 -- 9. Auto Buy Feeder
-local AutoBuyFeeder = Tabs.Main:AddToggle("AutoBuyFeeder", {
-    Title = "Auto Buy Feeder",
+local AutoBuyFeeder = Tabs.Upgrade:AddToggle("AutoBuyFeeder", {
+    Title = "ซื้อเครื่องให้อาหารเพิ่ม (Buy Feeder)",
+    Description = "ซื้อเครื่องให้อาหารไก่เพิ่มในช่องเล้าที่ยังว่างอยู่",
     Default = false
 })
 
@@ -1723,8 +1841,33 @@ AutoBuyFeeder:OnChanged(function(Value)
     end
 end)
 
+-- 10. Auto Upgrade Coop
+local AutoUpgradeCoop = Tabs.Upgrade:AddToggle("AutoUpgradeCoop", {
+    Title = "ขยายขนาดเล้าไก่ (Expand Coop)",
+    Description = "อัปเกรดขยายพื้นที่เล้าไก่อัตโนมัติเมื่อเงินพร้อม",
+    Default = false
+})
+
+AutoUpgradeCoop:OnChanged(function(Value)
+    getgenv().autoUpgradeCoopEnabled = Value
+
+    if Value and not getgenv().autoUpgradeCoopLoopActive and remotesModule and coopViewModule and dataServiceModule and dataControllerModule then
+        getgenv().autoUpgradeCoopLoopActive = true
+
+        task.spawn(function()
+            while getgenv().autoUpgradeCoopEnabled do
+                pcall(upgradeCoop)
+
+                task.wait(5)
+            end
+
+            getgenv().autoUpgradeCoopLoopActive = false
+        end)
+    end
+end)
+
 ObsidianGlassEngine:Notify({
     Title = "ตีไก่ไปกับพยอมบอย",
-    Content = "โหลดระบบอัตโนมัติ (Baseline Message 9 Core) เรียบร้อยแล้ว",
+    Content = "ติดตั้งระบบ Auto Chaos Event (พร้อม Retreat หอคอย) เรียบร้อย",
     Duration = 4
 })
