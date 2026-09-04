@@ -1,9 +1,15 @@
 local _LocalPlayer = game:GetService("Players").LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local isMobileDevice = UserInputService and UserInputService.TouchEnabled == true
 
 ----------------------------------------------------------------
 -- 1. Humanoid Clone Bypass (Bypass Humanoid State / Anti-Death)
 ----------------------------------------------------------------
 local function doHumanoidBypass()
+    if isMobileDevice then
+        print("[SAE] Mobile detected: Skipping Humanoid clone bypass to preserve TouchControls & Physics")
+        return
+    end
     local char = _LocalPlayer.Character or _LocalPlayer.CharacterAdded:Wait()
     if not char then return end
 
@@ -39,6 +45,7 @@ end)
 -- 2. Constant Scan & Hook Bypass ("X-14" Scan)
 ----------------------------------------------------------------
 task.spawn(function()
+    if isMobileDevice then return end
     pcall(function()
         if typeof(getgc) ~= "function" or typeof(hookfunction) ~= "function" then return end
 
@@ -90,6 +97,7 @@ end)
 -- 3. Detection Function Metatable Bypass ("gmatch", "GetFullName")
 ----------------------------------------------------------------
 task.spawn(function()
+    if isMobileDevice then return end
     pcall(function()
         if typeof(filtergc) ~= "function" then return end
 
@@ -129,6 +137,7 @@ end)
 -- [[ End Rscripts Risk Notice ]]
 -- [[ GC Protection & Hooks ]]
 task.spawn(function()
+    if isMobileDevice then return end
     pcall(function()
         if typeof(getgc) ~= "function" or typeof(hookfunction) ~= "function" then return end
         local getconstants = getconstants or (debug and debug.getconstants)
@@ -731,12 +740,12 @@ end
 --   2. หา anti-speed closure โดย upvalue signature (nups=19, line=3)
 --   3. hookfunction → ใส่ setmetatable({}) บน table ที่ anti-cheat ส่งมา
 --      → ทำให้ __index / __newindex check ล้มเหลว → ไม่ kick
--- ถ้า executor ไม่รองรับ getgc → fallback Heartbeat enforce
+-- ถ้า executor ไม่รองรับ getgc หรือบน มือถือ → fallback Heartbeat enforce
 ----------------------------------------------------------------
 do
     local bypassOk = false
 
-    if typeof(getgc) == "function" and typeof(hookfunction) == "function"
+    if not isMobileDevice and typeof(getgc) == "function" and typeof(hookfunction) == "function"
         and typeof(islclosure) == "function" then
 
         local function findAntiSpeedFunc(nups, linedef)
@@ -785,14 +794,14 @@ do
 
     if not bypassOk then
         -- fallback: Heartbeat enforce เหมือน SpeedBP แต่ไม่ hook
-        -- ใช้กับ executor ที่ไม่มี getgc
+        -- ใช้กับ executor ที่ไม่มี getgc หรืออุปกรณ์มือถือ
         RunService.Heartbeat:Connect(function()
             local hum = humanoid()
             if hum and hum.WalkSpeed < (Cfg.BoostWalkSpeed or 16) then
                 pcall(function() hum.WalkSpeed = Cfg.BoostWalkSpeed or 16 end)
             end
         end)
-        logLine("init", "SpeedBP: fallback Heartbeat enforce (getgc unavailable)")
+        logLine("init", "SpeedBP: fallback Heartbeat enforce (safe mode)")
     end
 end
 
@@ -941,7 +950,6 @@ function Guardless.detach()
     ENV.NyxDetached = ENV.NyxDetached or {}
     local held = ENV.NyxDetached
     local ok = true
-    local isMobile = UserInputService and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
     for _, name in ipairs(Guardless.Reports) do
         local live = net:FindFirstChild(name)
@@ -955,9 +963,7 @@ function Guardless.detach()
             end
             held[name] = { remote = live, parent = net }
             local okd = pcall(function()
-                if not isMobile then
-                    live.Parent = nil
-                end
+                live.Parent = nil
             end)
             if not okd then ok = false end
         elseif not (held[name] or net:FindFirstChild("ClientCharacter: IntegrityHeartbeat")) then
@@ -1039,8 +1045,7 @@ local function pin(pos)
     end
 
     conns[#conns + 1] = RunService.Heartbeat:Connect(apply)
-    local isMobile = UserInputService and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-    if not isMobile then
+    if not isMobileDevice then
         pcall(function() conns[#conns + 1] = RunService.PreSimulation:Connect(apply) end)
         pcall(function() conns[#conns + 1] = RunService.PostSimulation:Connect(apply) end)
         if RunService:IsClient() then
@@ -2115,13 +2120,6 @@ local function triggerPrompt(prompt)
         pcall(firePP, prompt, 0)
         pcall(firePP, prompt)
     end
-    pcall(function()
-        if prompt.InputHoldBegan then
-            prompt:InputHoldBegan()
-            task.wait(0.01)
-            prompt:InputHoldEnded()
-        end
-    end)
     return true
 end
 
@@ -2405,7 +2403,7 @@ local function instantSteal(rec)
     if not eggPos then return false, "ไม่มีตำแหน่งไข่" end
 
     local hum = humanoid()
-    if not hrp() or (hum and hum:GetState() == Enum.HumanoidStateType.None) then
+    if not hrp() or not hum or hum.Health <= 0 then
         task.wait(0.3)
         return false, "ตัวละครยังไม่พร้อม"
     end
@@ -2490,7 +2488,7 @@ end
 local function stealOnce(rec)
     unequipCharacterTools()
     local hum = humanoid()
-    if not hrp() or (hum and hum:GetState() == Enum.HumanoidStateType.None) then
+    if not hrp() or not hum or hum.Health <= 0 then
         task.wait(0.3)
         return false, "ตัวละครยังไม่พร้อม"
     end
